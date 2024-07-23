@@ -49,9 +49,9 @@ IndexPutParams initializeSampleParams(samplesCommon::Args const& args)
 {
     IndexPutParams params;
 
-    params.inputTensorNames.push_back("src");
-    params.inputTensorNames.push_back("inds");
     params.inputTensorNames.push_back("dst");
+    params.inputTensorNames.push_back("inds");
+    params.inputTensorNames.push_back("src");
     params.outputTensorNames.push_back("dst_out");
     params.fp16 = args.runInFp16;
     params.dummy = args.rowOrder;

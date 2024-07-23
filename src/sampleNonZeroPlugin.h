@@ -45,7 +45,7 @@ struct IndexPutParams : public samplesCommon::SampleParams
 };
 //} // namespace
 
-enum IOpos{IN_SRC, IN_INDS, IN_DST, OUT_DST};
+enum IOpos{IN_DST, IN_INDS, IN_SRC, OUT_DST};
 
 //! \brief  The SampleIndexPutPlugin class implements a IndexPut plugin
 //!

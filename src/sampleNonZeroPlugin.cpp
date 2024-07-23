@@ -34,6 +34,7 @@
 #include <iostream>
 #include <random>
 #include <sstream>
+
 using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
@@ -165,7 +166,7 @@ public:
         int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override
     {
         // The input src and dst tensors must be 2-D
-        if (inputs[0].nbDims != 2 || inputs[2].nbDims != 2)
+        if (inputs[IOpos::IN_DST].nbDims != 2 || inputs[IOpos::IN_SRC].nbDims != 2)
         {
             return -1;
         }
@@ -186,9 +187,9 @@ public:
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override
     {
         int32_t const numInds = inputDesc[IOpos::IN_INDS].dims.d[0];
-        int32_t const C = inputDesc[IOpos::IN_SRC].dims.d[1];
+        int32_t const C = inputDesc[IOpos::IN_DST].dims.d[1];
 
-        auto type = inputDesc[0].type;
+        auto type = inputDesc[IOpos::IN_DST].type;
 
         if (!(type == nvinfer1::DataType::kHALF || type == nvinfer1::DataType::kFLOAT))
         {
@@ -197,10 +198,10 @@ public:
         }
 
         auto type_bytes = (type == nvinfer1::DataType::kHALF ? 2 : 4);
-        cudaMemcpyAsync(outputs[0], inputs[IOpos::IN_DST], inputDesc[IOpos::IN_SRC].dims.d[0] * C * type_bytes, cudaMemcpyDeviceToDevice, stream);
+        cudaMemcpyAsync(outputs[0], inputs[IOpos::IN_DST], inputDesc[IOpos::IN_DST].dims.d[0] * C * type_bytes, cudaMemcpyDeviceToDevice, stream);
         cudaMemsetAsync(workspace, 0, numInds * sizeof(int32_t), stream);
 
-        indexPutHelper(type, static_cast<const void*>(inputs[0]), static_cast<const int64_t*>(inputs[1]), numInds, C, static_cast<uint32_t*>(workspace),
+        indexPutHelper(type, static_cast<const void*>(inputs[IOpos::IN_SRC]), static_cast<const int64_t*>(inputs[IOpos::IN_INDS]), numInds, C, static_cast<uint32_t*>(workspace),
                 outputs[0], stream);
 
         return 0;
@@ -226,7 +227,7 @@ public:
         DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override
     {
         //inputs[1].max.d[0]; I might want to use this later
-        return 120000 * sizeof(int32_t); // considering a maximum of 60000 voxels
+        return 65536 * sizeof(int32_t); // considering a maximum of 60000 voxels
     }
 
 private:
@@ -357,12 +358,13 @@ bool SampleIndexPutPlugin::build()
     }
 
     ASSERT(network->getNbInputs() == 3);
-    mInputDims[0] = network->getInput(IOpos::IN_SRC)->getDimensions(); // src
-    ASSERT(mInputDims[0].nbDims == 2);
-    mInputDims[1] = network->getInput(IOpos::IN_INDS)->getDimensions(); // inds
-    ASSERT(mInputDims[1].nbDims == 1);
-    mInputDims[2] = network->getInput(IOpos::IN_DST)->getDimensions(); // dst
-    ASSERT(mInputDims[2].nbDims == 2);
+
+    mInputDims[IOpos::IN_DST] = network->getInput(IOpos::IN_DST)->getDimensions(); // dst
+    ASSERT(mInputDims[IOpos::IN_DST].nbDims == 2);
+    mInputDims[IOpos::IN_INDS] = network->getInput(IOpos::IN_INDS)->getDimensions(); // inds
+    ASSERT(mInputDims[IOpos::IN_INDS].nbDims == 1);
+    mInputDims[IOpos::IN_SRC] = network->getInput(IOpos::IN_SRC)->getDimensions(); // src
+    ASSERT(mInputDims[IOpos::IN_SRC].nbDims == 2);
 
     ASSERT(network->getNbOutputs() == 1);
     mOutputDims = network->getOutput(0)->getDimensions(); // dst_out
@@ -388,9 +390,9 @@ bool SampleIndexPutPlugin::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>&
     }
 
     int32_t const C = 2;
-    auto* src = network->addInput("src", DataType::kFLOAT, {2, {10, C}});
-    auto* inds = network->addInput("inds", DataType::kINT64, {1, {10}});
     auto* dst = network->addInput("dst", DataType::kFLOAT, {2, {6, C}});
+    auto* inds = network->addInput("inds", DataType::kINT64, {1, {10}});
+    auto* src = network->addInput("src", DataType::kFLOAT, {2, {10, C}});
 
     sample::gLogInfo << "Added inputs to network" << std::endl;
 
@@ -404,7 +406,7 @@ bool SampleIndexPutPlugin::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>&
 
     sample::gLogInfo << "Plugin got created" << std::endl;
 
-    std::vector<ITensor*> inputsVec{src, inds, dst};
+    std::vector<ITensor*> inputsVec{dst, inds, src};
     auto pluginIndexPutLayer = network->addPluginV3(inputsVec.data(), inputsVec.size(), nullptr, 0, *plugin);
     ASSERT(pluginIndexPutLayer != nullptr);
     ASSERT(pluginIndexPutLayer->getInput(0) != nullptr);
@@ -433,9 +435,9 @@ bool SampleIndexPutPlugin::infer()
 
     // Since the data dependent output size cannot be inferred from the engine denote a sufficient size for the
     // corresponding output buffer (along with the rest of the I/O tensors)
-    std::vector<int64_t> ioVolumes = {mInputDims[0].d[0] * mInputDims[0].d[1], // src
+    std::vector<int64_t> ioVolumes = {mInputDims[0].d[0] * mInputDims[0].d[1], // dst
                                       mInputDims[1].d[0], // inds
-                                      mInputDims[2].d[0] * mInputDims[2].d[1], // dst
+                                      mInputDims[2].d[0] * mInputDims[2].d[1], // src
                                       mOutputDims.d[0] * mOutputDims.d[1]}; //dst_out
 
     // Create RAII buffer manager object
@@ -501,18 +503,16 @@ bool SampleIndexPutPlugin::processInput(samplesCommon::BufferManager const& buff
     std::uniform_int_distribution<int64_t> distr64(0, 5);
 
     sample::gLogInfo << mParams.inputTensorNames[0] << ":" << std::endl;
-    float* srcBuf = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
-    for (int32_t i = 0; i < 10; ++i)
+    float* dstBuf = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
+    for (int32_t i = 0; i < 6; ++i)
     {
         for (int32_t j = 0; j < 2; ++j)
         {
-            srcBuf[i*2 + j] = distr(generator);
-            sample::gLogInfo << srcBuf[i*2 + j] << ", ";
+            dstBuf[i*2 + j] = 0;
+            sample::gLogInfo << dstBuf[i*2 + j] << ", ";
         }
         sample::gLogInfo << std::endl;
-
     }
-
 
     int64_t* indsBuf = static_cast<int64_t*>(buffers.getHostBuffer(mParams.inputTensorNames[1]));
     ASSERT(indsBuf != nullptr);
@@ -524,16 +524,17 @@ bool SampleIndexPutPlugin::processInput(samplesCommon::BufferManager const& buff
     }
     sample::gLogInfo << std::endl;
 
-    sample::gLogInfo << "Dst:" << std::endl;
-    float* dstBuf = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[2]));
-    for (int32_t i = 0; i < 6; ++i)
+    sample::gLogInfo << mParams.inputTensorNames[2] << ":" << std::endl;
+    float* srcBuf = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[2]));
+    for (int32_t i = 0; i < 10; ++i)
     {
         for (int32_t j = 0; j < 2; ++j)
         {
-            dstBuf[i*2 + j] = 0;
-            sample::gLogInfo << dstBuf[i*2 + j] << ", ";
+            srcBuf[i*2 + j] = distr(generator);
+            sample::gLogInfo << srcBuf[i*2 + j] << ", ";
         }
         sample::gLogInfo << std::endl;
+
     }
 
     return true;
