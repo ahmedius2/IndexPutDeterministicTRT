@@ -116,7 +116,7 @@ public:
 
     char const* getPluginVersion() const noexcept override
     {
-        return "0";
+        return "1";
     }
 
     char const* getPluginNamespace() const noexcept override
@@ -251,7 +251,7 @@ char const* IndexPutPluginCreator::getPluginName() const noexcept
 
 char const* IndexPutPluginCreator::getPluginVersion() const noexcept
 {
-    return "0";
+    return "1";
 }
 
 PluginFieldCollection const* IndexPutPluginCreator::getFieldNames() noexcept
@@ -399,7 +399,7 @@ bool SampleIndexPutPlugin::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>&
     std::vector<PluginField> const vecPF{{"dummy", &mParams.dummy, PluginFieldType::kINT32, 1}};
     PluginFieldCollection pfc{static_cast<int32_t>(vecPF.size()), vecPF.data()};
 
-    auto pluginCreator = static_cast<IPluginCreatorV3One*>(getPluginRegistry()->getCreator("IndexPutPlugin", "0", ""));
+    auto pluginCreator = static_cast<IPluginCreatorV3One*>(getPluginRegistry()->getCreator("IndexPutPlugin", "1", ""));
     auto plugin = std::unique_ptr<IPluginV3>(pluginCreator->createPlugin("IndexPutPlugin", &pfc, TensorRTPhase::kBUILD));
 
     sample::gLogInfo << "Plugin got created" << std::endl;
@@ -561,3 +561,4 @@ bool SampleIndexPutPlugin::verifyOutput(samplesCommon::BufferManager const& buff
     return true;
 }
 
+REGISTER_TENSORRT_PLUGIN(IndexPutPluginCreator);
