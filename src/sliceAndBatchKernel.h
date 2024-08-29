@@ -14,20 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef SAMPLE_NONZERO_KERNEL_H
-#define SAMPLE_NONZERO_KERNEL_H
-
-#include <cuda_fp16.h>
+#ifndef SLICE_AND_BATCH_KERNEL_H
+#define SLICE_AND_BATCH_KERNEL_H
 
 #include <cstdint>
+#include <cuda_runtime.h>
 
-template <typename T>
-void indexPutImpl(const T* src,
-        const int64_t*  inds,
-        const int32_t numInds,
-        const uint32_t C,
-        uint32_t* idxBuf, // should be allocated and set to zeros
-        T* dst,
+void sliceAndBatchImpl(
+        const float* inp, // NHWC
+        const int inp_size[4],
+        const int32_t* inds, // [num_inds, 3]
+        const int num_inds,
+        float* outp, // NCHW, should be allocated before
+        const int outp_size[4],
+        const int slice_size,
         cudaStream_t stream);
 
-#endif // SAMPLE_NONZERO_KERNEL_Hs
+#endif // SLICE_AND_BATCH_KERNEL_Hs

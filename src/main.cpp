@@ -23,12 +23,12 @@
 #include "buffers.h"
 #include "common.h"
 #include "logger.h"
-#include "nonZeroKernel.h"
+#include "sliceAndBatchKernel.h"
 #include "parserOnnxConfig.h"
 
 #include "NvInfer.h"
 #include <cuda_runtime_api.h>
-#include "sampleNonZeroPlugin.h"
+#include "sliceAndBatchPlugin.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -38,23 +38,29 @@
 using namespace nvinfer1;
 using samplesCommon::SampleUniquePtr;
 
-std::string const kSAMPLE_NAME = "TensorRT.sample_index_put_plugin";
+std::string const kSAMPLE_NAME = "TensorRT.slice_and_batch_nhwc";
 
-REGISTER_TENSORRT_PLUGIN(IndexPutPluginCreator);
+//REGISTER_TENSORRT_PLUGIN(SliceAndBatchPluginCreator);
 
 //!
 //! \brief Initializes members of the params struct using the command line args
 //!
-IndexPutParams initializeSampleParams(samplesCommon::Args const& args)
+SliceAndBatchParams initializeSampleParams(samplesCommon::Args const& args)
 {
-    IndexPutParams params;
+    SliceAndBatchParams params;
 
-    params.inputTensorNames.push_back("dst");
+    params.inputTensorNames.push_back("inp");
     params.inputTensorNames.push_back("inds");
-    params.inputTensorNames.push_back("src");
-    params.outputTensorNames.push_back("dst_out");
+    params.outputTensorNames.push_back("slices");
     params.fp16 = args.runInFp16;
-    params.dummy = args.rowOrder;
+//    params.dummy = args.rowOrder;
+
+//    std::default_random_engine generator(static_cast<uint32_t>(time(nullptr)));
+//    std::uniform_int_distribution<int64_t> distr(30000, 60000);
+//    params.src_numv = distr(generator);
+//    std::uniform_int_distribution<int64_t> distr2(10000, params.src_numv);
+//    params.dst_numv = distr2(generator);
+//    params.C_dim = 128;
 
     return params;
 }
@@ -92,9 +98,10 @@ int main(int argc, char** argv)
 
     sample::gLogger.reportTestStart(sampleTest);
 
-    SampleIndexPutPlugin sample(initializeSampleParams(args));
+    auto params = initializeSampleParams(args);
+    SampleSliceAndBatchPlugin sample(params);
 
-    sample::gLogInfo << "Building and running a GPU inference engine for IndexPut plugin" << std::endl;
+    sample::gLogInfo << "Building and running a GPU inference engine for SliceAndBatch plugin" << std::endl;
 
     if (!sample.build())
     {
@@ -104,6 +111,9 @@ int main(int argc, char** argv)
     {
         return sample::gLogger.reportFail(sampleTest);
     }
+
+//    std::cout << std::endl << "Src numv:" << params.src_numv << " Dst numv:"
+//                << params.dst_numv << " C:" << params.C_dim << std::endl;
 
     return sample::gLogger.reportPass(sampleTest);
 }

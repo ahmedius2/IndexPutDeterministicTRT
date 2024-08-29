@@ -22,7 +22,7 @@
 #include "buffers.h"
 #include "common.h"
 #include "logger.h"
-#include "nonZeroKernel.h"
+#include "sliceAndBatchKernel.h"
 #include "parserOnnxConfig.h"
 
 #include "NvInfer.h"
@@ -39,22 +39,30 @@ using samplesCommon::SampleUniquePtr;
 
 //namespace
 //{
-struct IndexPutParams : public samplesCommon::SampleParams
+struct SliceAndBatchParams : public samplesCommon::SampleParams
 {
-    bool dummy{true};
+    int32_t slice_size = 5;
+    nvinfer1::Dims inp_dims = {
+        .nbDims = 4,
+        .d = {1, 7, 7, 1, 0, 0, 0, 0}
+    };
+    nvinfer1::Dims inds_dims = {
+        .nbDims = 2,
+        .d = {2, 3, 0, 0, 0, 0, 0, 0}
+    };
 };
 //} // namespace
 
-enum IOpos{IN_DST, IN_INDS, IN_SRC, OUT_DST};
+enum IOpos{IN_INP, IN_INDS, OUT_SLICES};
 
-//! \brief  The SampleIndexPutPlugin class implements a IndexPut plugin
+//! \brief  The SampleSliceAndBatchPlugin class implements a SliceAndBatch plugin
 //!
 //! \details The plugin is able to output the non-zero indices in row major or column major order
 //!
-class SampleIndexPutPlugin
+class SampleSliceAndBatchPlugin
 {
 public:
-    SampleIndexPutPlugin(IndexPutParams const& params);
+    SampleSliceAndBatchPlugin(SliceAndBatchParams const& params);
 
     //!
     //! \brief Function builds the network engine
@@ -67,9 +75,9 @@ public:
     bool infer();
 
 private:
-    IndexPutParams mParams; //!< The parameters for the sample.
+    SliceAndBatchParams mParams; //!< The parameters for the sample.
 
-    nvinfer1::Dims mInputDims[3];  //!< The dimensions of the input to the network.
+    nvinfer1::Dims mInputDims[2];  //!< The dimensions of the input to the network.
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
 
     std::shared_ptr<nvinfer1::IRuntime> mRuntime;   //!< The TensorRT runtime used to deserialize the engine
@@ -78,7 +86,7 @@ private:
     uint32_t mSeed{};
 
     //!
-    //! \brief Creates a TensorRT network and inserts a IndexPut plugin
+    //! \brief Creates a TensorRT network and inserts a SliceAndBatch plugin
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
         SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config);
@@ -94,10 +102,10 @@ private:
     bool verifyOutput(samplesCommon::BufferManager const& buffers);
 };
 
-class IndexPutPluginCreator : public nvinfer1::IPluginCreatorV3One
+class SliceAndBatchPluginCreator : public nvinfer1::IPluginCreatorV3One
 {
 public:
-    IndexPutPluginCreator();
+    SliceAndBatchPluginCreator();
 
     char const* getPluginName() const noexcept override;
 
