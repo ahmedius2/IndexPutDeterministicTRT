@@ -309,7 +309,9 @@ bool SampleSliceAndBatchPlugin::build()
         sample::gLogError << "Builder failed." << std::endl;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(
+            1U << static_cast<uint32_t>(
+            NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));
     if (!network)
     {
         sample::gLogError << "Network creation failed." << std::endl;
@@ -445,7 +447,7 @@ bool SampleSliceAndBatchPlugin::infer()
 
 
     // Create RAII buffer manager object
-    samplesCommon::BufferManager buffers(mEngine, ioVolumes);
+    samplesCommon::BufferManager buffers(mEngine);
 
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
